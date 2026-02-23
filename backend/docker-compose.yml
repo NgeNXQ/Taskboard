@@ -1,0 +1,53 @@
+services:
+
+  api:
+    build:
+      context: ./EC.TaskBoard.Web
+      dockerfile: Dockerfile
+    ports:
+      - "${API_PORT}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      ConnectionStrings__DatabaseConnection: "Host=postgres;Port=5432;Database=${POSTGRES_BOARD_DATABASE};Username=${POSTGRES_BOARD_USERNAME};Password=${POSTGRES_BOARD_PASSWORD};"
+      ConnectionStrings__CacheIdempotencyConnection: "redis:6379,password=${REDIS_IDEMPOTENCY_PASSWORD}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_BOARD_DATABASE}
+      POSTGRES_USER: ${POSTGRES_BOARD_USERNAME}
+      POSTGRES_PASSWORD: ${POSTGRES_BOARD_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_BOARD_PORT}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_BOARD_USERNAME} -d ${POSTGRES_BOARD_DATABASE}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_IDEMPOTENCY_PASSWORD}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_IDEMPOTENCY_PORT}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_IDEMPOTENCY_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
